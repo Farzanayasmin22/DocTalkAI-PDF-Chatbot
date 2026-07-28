@@ -1,9 +1,12 @@
-# DocTalkAI-PDF-Chatbot
-An AI-powered PDF chatbot that enables users to upload documents and ask natural language questions using Retrieval-Augmented Generation (RAG), LangChain, ChromaDB, Hugging Face Embeddings, Gemini Flash, and Streamlit.
-
 # 💬 DocTalkAI – AI-Powered PDF Chatbot
 
 An AI-powered PDF chatbot that enables users to upload PDF documents and interact with them using natural language. The application leverages Retrieval-Augmented Generation (RAG) to retrieve relevant information from uploaded documents and generate context-aware responses using Google's Gemini Flash model.
+
+---
+## 🌐 Live Demo
+
+**Try the application here:**  
+https://doctalkai-pdf-chatbot.streamlit.app/
 
 ---
 
