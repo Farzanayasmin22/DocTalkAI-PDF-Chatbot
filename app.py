@@ -5,8 +5,7 @@ import uuid
 import time
 from dotenv import load_dotenv
 
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from src.pdf_loader import load_pdf
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -26,9 +25,6 @@ st.divider()
 
 # ---------- Core functions ----------
 
-def load_pdf(file_path):
-    loader = PyPDFLoader(file_path)
-    return loader.load()
 
 def split_documents(documents, chunk_size=1000, chunk_overlap=200):
     splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
