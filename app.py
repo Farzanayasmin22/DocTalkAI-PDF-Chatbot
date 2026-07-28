@@ -2,14 +2,13 @@ import streamlit as st
 import tempfile
 import os
 import uuid
-import time
-from dotenv import load_dotenv
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from src.pdf_loader import load_pdf
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
-from langchain_google_genai import ChatGoogleGenerativeAI
+from src.text_splitter import split_documents
+from src.embeddings import get_embedding_model
+from src.vector_store import create_vector_store
+from src.llm import get_llm
+from src.rag_pipeline import generate_answer
 
 # ------------------ Page Configuration ------------------ #
 st.set_page_config(page_title="DocTalkAI", page_icon="💬", layout="centered")
@@ -26,66 +25,7 @@ st.divider()
 
 # ---------- Core functions ----------
 
-
-def split_documents(documents, chunk_size=1000, chunk_overlap=200):
-    splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    return splitter.split_documents(documents)
-
-embedding_model = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-small-en-v1.5",
-    encode_kwargs={"normalize_embeddings": True}
-)
-
-def create_vector_store(chunks, embedding_model, persist_directory="chroma_db_app"):
-    return Chroma.from_documents(documents=chunks, embedding=embedding_model, persist_directory=persist_directory)
-
-def generate_answer(query, vector_store, llm, k=3):
-    retrieved_docs = vector_store.similarity_search(query, k=k)
-    if not retrieved_docs:
-        return (
-            "I couldn't find information related to that question in the uploaded PDF.\n\n"
-            "Try:\n• Rephrasing your question\n• Asking about another topic\n• Requesting a summary of a section"
-        ), []
-
-    context = "\n\n".join(doc.page_content for doc in retrieved_docs)
-    prompt = f"""
-You are a helpful AI assistant.
-
-Use ONLY the provided context to answer the user's question.
-Do not use any outside knowledge.
-
-If the user asks for a summary:
-- Summarize the document in clear, well-structured paragraphs.
-- Include:
-  • The main purpose of the document
-  • The important concepts discussed
-  • The key findings or contributions
-  • The overall conclusion (if available)
-- Do NOT list citations, references, or bibliography unless the user specifically asks about them.
-- Keep the summary concise, informative, and easy to understand.
-
-For all other questions:
-- Answer clearly using complete sentences.
-- Explain the answer in a simple and detailed manner based only on the provided context.
-
-If the answer is not found in the context, reply exactly:
-"I couldn't find that information in the uploaded document."
-
-Context = {context}
-Question = {query}
-
-Answer:
-"""
-    response = llm.invoke(prompt)
-    answer = response.content[0]['text'] if isinstance(response.content, list) else response.content
-    return answer, retrieved_docs
-
-def get_llm():
-    load_dotenv()
-    api_key = os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        raise ValueError("GOOGLE_API_KEY not found in the .env file.")
-    return ChatGoogleGenerativeAI(model="gemini-flash-latest", google_api_key=api_key, temperature=0)
+embedding_model = get_embedding_model()
 
 llm = get_llm()
 
