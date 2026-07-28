@@ -5,6 +5,7 @@ import uuid
 import time
 from dotenv import load_dotenv
 
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from src.pdf_loader import load_pdf
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
