@@ -145,11 +145,11 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("⚙️ AI Stack")
     st.markdown("""
-- 🤖 Gemini Flash
-- 🧠 BAAI/bge-small-en-v1.5
-- 📚 ChromaDB
-- 🔗 LangChain
-- 🎨 Streamlit
+- Gemini Flash
+- BAAI/bge-small-en-v1.5
+- ChromaDB
+- LangChain
+- Streamlit
 """)
     st.markdown("---")
     st.subheader("About")
