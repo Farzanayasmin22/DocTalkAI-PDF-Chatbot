@@ -101,7 +101,33 @@ Question = {query}
 
 Answer:
 """
-    response = llm.invoke(prompt)
+    # ---------- CHANGED: catch and surface the real Gemini error ----------
+    # Streamlit redacts uncaught exception details in the UI by default, which was
+    # hiding the actual reason the Gemini call failed. We catch it here instead so
+    # the person actually sees what went wrong (rate limit, invalid key, etc.).
+    try:
+        response = llm.invoke(prompt)
+    except Exception as e:
+        error_text = str(e).lower()
+        if "429" in error_text or "quota" in error_text or "rate" in error_text:
+            import re
+            retry_match = re.search(r"retry in ([\d.]+)s", str(e), re.IGNORECASE)
+            wait_msg = f"about {int(float(retry_match.group(1)))} seconds" if retry_match else "a minute"
+            return (
+                f"⚠️ The AI service is temporarily rate-limited (too many requests "
+                f"on the free tier). Please wait {wait_msg} and try again."
+            ), []
+        elif "401" in error_text or "403" in error_text or "api key" in error_text or "permission" in error_text:
+            return (
+                "⚠️ There's an issue with the AI service's API key (invalid, expired, "
+                "or lacking permission). Please check the GOOGLE_API_KEY configuration."
+            ), []
+        else:
+            return (
+                f"⚠️ Something went wrong while generating the answer: {e}"
+            ), []
+    # ---------- END CHANGED ----------
+
     answer = response.content[0]['text'] if isinstance(response.content, list) else response.content
     return answer, retrieved_docs
 
