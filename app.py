@@ -64,8 +64,26 @@ llm = load_llm()
 def create_vector_store(chunks, embedding_model, persist_directory="chroma_db_app"):
     return Chroma.from_documents(documents=chunks, embedding=embedding_model, persist_directory=persist_directory)
 
-def generate_answer(query, vector_store, llm, k=3):
-    retrieved_docs = vector_store.similarity_search(query, k=k)
+def generate_answer(query, vector_store, llm, chat_history=None, k=3):
+    chat_history = chat_history or []
+
+    # ---------- CHANGED: history-aware retrieval, no extra LLM call ----------
+    # A follow-up like "explain that more" has no useful keywords on its own, so
+    # a plain vector search on `query` alone would retrieve poorly. We prepend the
+    # last exchange (not the full history, to keep this cheap and on-topic) to the
+    # search query. This is plain string concatenation, not an LLM call, so it costs
+    # nothing extra against your Gemini quota and adds negligible latency.
+    MAX_HISTORY_TURNS = 3  # last 3 user+assistant pairs = 6 messages
+    recent_history = chat_history[-(MAX_HISTORY_TURNS * 2):]
+
+    if recent_history:
+        history_snippet_for_search = " ".join(m["content"] for m in recent_history[-2:])
+        retrieval_query = f"{history_snippet_for_search} {query}"
+    else:
+        retrieval_query = query
+    # ---------- END CHANGED ----------
+
+    retrieved_docs = vector_store.similarity_search(retrieval_query, k=k)
     if not retrieved_docs:
         return (
             "I couldn't find information related to that question in the uploaded PDF.\n\n"
@@ -73,11 +91,23 @@ def generate_answer(query, vector_store, llm, k=3):
         ), []
 
     context = "\n\n".join(doc.page_content for doc in retrieved_docs)
+
+    # ---------- CHANGED: fold recent conversation into the same single prompt ----------
+    if recent_history:
+        conversation_snippet = "\n".join(
+            f"{m['role'].capitalize()}: {m['content']}" for m in recent_history
+        )
+        conversation_block = f"\nRecent conversation (for context only, do not repeat it back):\n{conversation_snippet}\n"
+    else:
+        conversation_block = ""
+    # ---------- END CHANGED ----------
+
     prompt = f"""
-You are a helpful AI assistant.
+You are a helpful AI assistant having an ongoing conversation about a document.
 
 Use ONLY the provided context to answer the user's question.
 Do not use any outside knowledge.
+Use the recent conversation only to resolve references like "that", "it", or "the previous point" — the answer itself must still come from the context.
 
 If the user asks for a summary:
 - Summarize the document in clear, well-structured paragraphs.
@@ -95,7 +125,7 @@ For all other questions:
 
 If the answer is not found in the context, reply exactly:
 "I couldn't find that information in the uploaded document."
-
+{conversation_block}
 Context = {context}
 Question = {query}
 
@@ -275,7 +305,12 @@ if uploaded_file is not None:
 
         with st.chat_message("assistant"):
             with st.spinner("🔍 Searching your document..."):
-                answer, sources = generate_answer(user_question, st.session_state.vector_store, llm)
+                answer, sources = generate_answer(
+                    user_question,
+                    st.session_state.vector_store,
+                    llm,
+                    chat_history=st.session_state.chat_history,
+                )
                 st.write(answer)
                 if sources:
                     with st.expander(f"📚 Retrieved Sources (Top {len(sources)} Matches)"):
