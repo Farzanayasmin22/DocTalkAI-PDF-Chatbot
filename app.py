@@ -34,13 +34,7 @@ def split_documents(documents, chunk_size=1000, chunk_overlap=200):
     splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     return splitter.split_documents(documents)
 
-# ---------- CHANGED: embedding model and LLM are now cached resources ----------
-# Without @st.cache_resource, Streamlit was re-loading the full sentence-transformers
-# model (and re-initializing the LLM client) on *every single rerun* of the script
-# (every button click, every chat message). On Streamlit Community Cloud's shared,
-# memory-limited process, that repeated loading under concurrent users is what was
-# starving memory and causing the embedding step to fail with
-# "Expected Embeddings to be non-empty list".
+# ---------- embedding model and LLM are cached resources ----------
 
 @st.cache_resource(show_spinner="Loading embedding model...")
 def load_embedding_model():
@@ -59,7 +53,6 @@ def load_llm():
 
 embedding_model = load_embedding_model()
 llm = load_llm()
-# ---------- END CHANGED ----------
 
 def create_vector_store(chunks, embedding_model, persist_directory="chroma_db_app"):
     return Chroma.from_documents(documents=chunks, embedding=embedding_model, persist_directory=persist_directory)
@@ -67,12 +60,8 @@ def create_vector_store(chunks, embedding_model, persist_directory="chroma_db_ap
 def generate_answer(query, vector_store, llm, chat_history=None, k=3):
     chat_history = chat_history or []
 
-    # ---------- CHANGED: history-aware retrieval, no extra LLM call ----------
-    # A follow-up like "explain that more" has no useful keywords on its own, so
-    # a plain vector search on `query` alone would retrieve poorly. We prepend the
-    # last exchange (not the full history, to keep this cheap and on-topic) to the
-    # search query. This is plain string concatenation, not an LLM call, so it costs
-    # nothing extra against your Gemini quota and adds negligible latency.
+    # ---------- history-aware retrieval, no extra LLM call ----------
+    
     MAX_HISTORY_TURNS = 3  # last 3 user+assistant pairs = 6 messages
     recent_history = chat_history[-(MAX_HISTORY_TURNS * 2):]
 
@@ -81,7 +70,6 @@ def generate_answer(query, vector_store, llm, chat_history=None, k=3):
         retrieval_query = f"{history_snippet_for_search} {query}"
     else:
         retrieval_query = query
-    # ---------- END CHANGED ----------
 
     retrieved_docs = vector_store.similarity_search(retrieval_query, k=k)
     if not retrieved_docs:
@@ -92,7 +80,7 @@ def generate_answer(query, vector_store, llm, chat_history=None, k=3):
 
     context = "\n\n".join(doc.page_content for doc in retrieved_docs)
 
-    # ---------- CHANGED: fold recent conversation into the same single prompt ----------
+    # ---------- fold recent conversation into the same single prompt ----------
     if recent_history:
         conversation_snippet = "\n".join(
             f"{m['role'].capitalize()}: {m['content']}" for m in recent_history
@@ -100,7 +88,6 @@ def generate_answer(query, vector_store, llm, chat_history=None, k=3):
         conversation_block = f"\nRecent conversation (for context only, do not repeat it back):\n{conversation_snippet}\n"
     else:
         conversation_block = ""
-    # ---------- END CHANGED ----------
 
     prompt = f"""
 You are a helpful AI assistant having an ongoing conversation about a document.
@@ -131,10 +118,8 @@ Question = {query}
 
 Answer:
 """
-    # ---------- CHANGED: catch and surface the real Gemini error ----------
-    # Streamlit redacts uncaught exception details in the UI by default, which was
-    # hiding the actual reason the Gemini call failed. We catch it here instead so
-    # the person actually sees what went wrong (rate limit, invalid key, etc.).
+    # ---------- catch and surface the real Gemini error ----------
+    
     try:
         response = llm.invoke(prompt)
     except Exception as e:
@@ -156,7 +141,6 @@ Answer:
             return (
                 f"⚠️ Something went wrong while generating the answer: {e}"
             ), []
-    # ---------- END CHANGED ----------
 
     answer = response.content[0]['text'] if isinstance(response.content, list) else response.content
     return answer, retrieved_docs
@@ -201,11 +185,8 @@ if uploaded_file is not None:
             docs = load_pdf(tmp_path)
             chunks = split_documents(docs)
 
-            # ---------- CHANGED: guard against PDFs with no extractable text ----------
-            # Scanned/image-only PDFs, password-protected PDFs, or corrupted PDFs
-            # produce zero usable text chunks, which previously crashed Chroma with
-            # "Expected Embeddings to be non-empty list". Now we catch it early and
-            # show a clear message instead.
+            # ---------- guard against PDFs with no extractable text ----------
+            
             if not chunks or all(not c.page_content.strip() for c in chunks):
                 st.error(
                     "⚠️ I couldn't extract any text from this PDF. It might be a "
@@ -220,7 +201,7 @@ if uploaded_file is not None:
             try:
                 vector_store = create_vector_store(chunks, embedding_model, persist_directory=persist_dir)
             except Exception as e:
-                # ---------- CHANGED: friendly error instead of a raw stack trace ----------
+                # ---------- friendly error instead of a raw stack trace ----------
                 st.error(
                     "⚠️ Something went wrong while processing this PDF. "
                     "Please try again, or try a different file."
